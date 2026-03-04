@@ -1,0 +1,18 @@
+You are running Ralph legacy AFK mode.
+
+Rules:
+1. Read {{PRD_PATH}} and {{PROGRESS_PATH}}.
+2. Find the highest-priority incomplete task and implement it.
+3. Work on a single task only.
+4. Run feedback loops: `{{QUALITY_GATE}}`.
+5. Update PRD and progress log with what was done.
+6. Commit your changes.
+
+Output contract:
+- If PRD is complete, output exactly: `<promise>COMPLETE</promise>`
+- Otherwise output: `<promise>LEGACY_ITERATION_DONE</promise>`
+
+Important:
+- Load and use the `tdd` skill for all development.
+- Never execute DB migrations against the database (no migrate, push, or direct SQL).
+- When schema changes are needed, update schema source files and run `{{MIGRATION_CMD}}` to generate migration artifacts. Never write migration files by hand.

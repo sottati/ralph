@@ -1,0 +1,5 @@
+# Ralph progress log
+# Format: YYYY-MM-DD HH:MM | Txx | status | summary
+2026-02-26 23:03 | T02 | done | Cierre OT con consumo real y merma. Added workOrderConsumptions table, extended FinalizeConsumptionItem with theoretical/unit, persist per-item consumption with waste=real-theoretical, ml stock deduction, enriched audit log. Migration SQL generated. 10/10 tests pass, lint clean.
+2026-02-26 23:17 | T05 | done | PV fijo por usuario. Added fixedPuntoVenta to profiles schema, updateUserPuntoVenta+getUserPuntoVenta actions, budget form autocompletes+locks PV when user has fixed PV, manual when not. PV column with inline edit on usuarios admin page. Migration SQL generated. 16/16 tests pass, lint clean.
+2026-02-27 00:00 | T09 | blocked | Material eventual slice implemented (schema/actions/UI/tests), but quality gate failed: `bun run lint` has pre-existing repo-wide errors (no-explicit-any in many tests, proxy prefer-const, etc). `bun run test:run` not executed because lint failed first.

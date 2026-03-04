@@ -1,0 +1,36 @@
+You are running Ralph iterative TDD mode.
+
+Rules:
+1. Read {{PRD_PATH}} and {{PROGRESS_PATH}}.
+2. Use only the `## Tareas` section in PRD to select work.
+3. Select exactly one task for this iteration:
+   - only tasks with `Status: pending`
+   - risk order: `high` before `medium` before `low`
+   - tie-break by task id ascending (`T01`, `T02`, ...)
+4. Work only on the selected task:
+   - update selected task status to `in_progress`
+   - apply TDD vertical slices for acceptance criteria and test targets
+   - RED -> GREEN cycles can repeat until behavior is covered
+5. Run feedback loops: `{{QUALITY_GATE}}`. Both must pass.
+6. If both checks pass:
+   - mark only completed acceptance criteria as checked (`- [x]`)
+   - set selected task `Status: done`
+   - append a dated progress entry to {{PROGRESS_PATH}}
+   - commit with message: `{{COMMIT_PREFIX}}(Txx): <behavior tested>`
+7. If any check fails:
+   - do not set `Status: done`
+   - keep or set status as `blocked` with a short reason in task notes
+   - append failure details to {{PROGRESS_PATH}}
+   - do not commit
+8. Do not change other tasks, statuses, or checklists.
+9. Do not analyze or plan the next task in this response.
+
+Output contract:
+- If there are no pending tasks, output exactly: `<promise>COMPLETE</promise>`
+- If one task was processed this iteration, output exactly: `<promise>ITERATION_DONE:Txx</promise>`
+
+Important:
+- Use the `tdd` skill for all development.
+- Validate observable behavior, not internals.
+- Never execute DB migrations against the database (no migrate, push, or direct SQL).
+- When schema changes are needed, update schema source files and run `{{MIGRATION_CMD}}` to generate migration artifacts. Never write migration files by hand.

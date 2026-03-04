@@ -1,0 +1,2 @@
+# Ralph progress log
+# Format: YYYY-MM-DD HH:MM | Txx | status | summary
