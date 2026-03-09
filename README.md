@@ -15,11 +15,15 @@ ln -s ~/Documents/ditherlabs/ralph/ralph.sh /usr/local/bin/ralph
 ```bash
 ralph run                           # 1 task (once mode)
 ralph run -n 5                      # 5 iteraciones (tdd loop)
+ralph run --cycle sprint-1          # ciclo explicito
 ralph run -a claude                 # override agent
 ralph run -a opencode -m prov/model # override agent + model
 ralph run --mode legacy -n 10       # legacy mode, 10 iteraciones
 ralph run --migration-cmd "bunx drizzle-kit generate"  # inline migration cmd
-ralph init                          # scaffold ralph.conf + ralph/PRD.md + ralph/progress.txt
+ralph init                          # scaffold ralph.conf + .ralph/cycles/DD-MM-YYYY
+ralph init --cycle sprint-1         # scaffold ciclo custom
+ralph new-cycle sprint-2            # crea nuevo ciclo + setea RALPH_CYCLE
+ralph list-cycles                   # lista ciclos locales
 ralph status                        # tabla de tasks parseada del PRD
 ralph log                           # progress.txt formateado
 ```
@@ -34,8 +38,7 @@ Crear `ralph.conf` en el root del proyecto target:
 # ralph.conf
 RALPH_AGENT=opencode
 RALPH_MODEL=""
-RALPH_PRD=ralph/PRD.md
-RALPH_PROGRESS=ralph/progress.txt
+RALPH_CYCLE="sprint-1"
 RALPH_QUALITY_GATE="bun run lint && bun run test:run"
 RALPH_COMMIT_PREFIX=TDD
 RALPH_MODE=tdd
@@ -77,4 +80,16 @@ Si `MIGRATION_CMD` está vacío (default), el prompt no menciona migraciones.
 │   └── progress.txt
 ├── IMPLEMENTATION.md
 └── README.md
+```
+
+En cada proyecto target:
+
+```
+.
+├── ralph.conf
+└── .ralph/
+    └── cycles/
+        └── sprint-1/
+            ├── PRD.md
+            └── progress.txt
 ```

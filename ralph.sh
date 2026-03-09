@@ -7,7 +7,9 @@ Usage: ralph <command> [options]
 
 Commands:
   run      Run Ralph loop
-  init     Scaffold ralph.conf and ralph/ files
+  init     Scaffold ralph.conf and .ralph cycle files
+  new-cycle Create .ralph cycle files
+  list-cycles List .ralph cycles
   status   Show PRD task table
   log      Show progress log
 
@@ -15,8 +17,16 @@ Run options:
   -n, --iterations N     Iterations (tdd/legacy)
   -a, --agent AGENT      Agent (opencode|claude)
   -m, --model MODEL      Model name
+  -c, --cycle ID         Cycle id
   --mode MODE            once|tdd|legacy
   --migration-cmd CMD    Migration generation command (e.g. "bunx drizzle-kit generate")
+
+Init options:
+  -c, --cycle ID         Cycle id (default DD-MM-YYYY)
+
+Status/log options:
+  -c, --cycle ID         Cycle id override
+
   -h, --help             Help
 EOF
 }
@@ -28,11 +38,14 @@ AGENT="opencode"
 MODEL=""
 MODE=""
 ITERATIONS="1"
-PRD="ralph/PRD.md"
-PROGRESS="ralph/progress.txt"
+PRD=""
+PROGRESS=""
+CYCLE_ID=""
 QUALITY_GATE="bun run lint && bun run test:run"
 COMMIT_PREFIX="TDD"
 MIGRATION_CMD=""
+LEGACY_PRD_DEFAULT="ralph/PRD.md"
+LEGACY_PROGRESS_DEFAULT="ralph/progress.txt"
 
 if [ -f ./ralph.conf ]; then
   # shellcheck disable=SC1091
@@ -42,11 +55,96 @@ fi
 if [ -n "${RALPH_AGENT:-}" ]; then AGENT="$RALPH_AGENT"; fi
 if [ -n "${RALPH_MODEL:-}" ]; then MODEL="$RALPH_MODEL"; fi
 if [ -n "${RALPH_MODE:-}" ]; then MODE="$RALPH_MODE"; fi
+if [ -n "${RALPH_CYCLE:-}" ]; then CYCLE_ID="$RALPH_CYCLE"; fi
 if [ -n "${RALPH_PRD:-}" ]; then PRD="$RALPH_PRD"; fi
 if [ -n "${RALPH_PROGRESS:-}" ]; then PROGRESS="$RALPH_PROGRESS"; fi
 if [ -n "${RALPH_QUALITY_GATE:-}" ]; then QUALITY_GATE="$RALPH_QUALITY_GATE"; fi
 if [ -n "${RALPH_COMMIT_PREFIX:-}" ]; then COMMIT_PREFIX="$RALPH_COMMIT_PREFIX"; fi
 if [ -n "${RALPH_MIGRATION_CMD:-}" ]; then MIGRATION_CMD="$RALPH_MIGRATION_CMD"; fi
+
+default_cycle_id() {
+  date +"%d-%m-%Y"
+}
+
+validate_cycle_id() {
+  local id="$1"
+  if ! [[ "$id" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Invalid cycle id: $id"
+    echo "Use only letters, numbers, dot, dash, underscore"
+    exit 1
+  fi
+}
+
+cycle_prd_path() {
+  local id="$1"
+  printf '.ralph/cycles/%s/PRD.md' "$id"
+}
+
+cycle_progress_path() {
+  local id="$1"
+  printf '.ralph/cycles/%s/progress.txt' "$id"
+}
+
+resolve_paths() {
+  if [ -n "$PRD" ] || [ -n "$PROGRESS" ]; then
+    if [ -z "$PRD" ] || [ -z "$PROGRESS" ]; then
+      echo "RALPH_PRD and RALPH_PROGRESS must both be set"
+      exit 1
+    fi
+    return
+  fi
+
+  if [ -n "$CYCLE_ID" ]; then
+    validate_cycle_id "$CYCLE_ID"
+    PRD="$(cycle_prd_path "$CYCLE_ID")"
+    PROGRESS="$(cycle_progress_path "$CYCLE_ID")"
+    return
+  fi
+
+  if [ -f "$LEGACY_PRD_DEFAULT" ] && [ -f "$LEGACY_PROGRESS_DEFAULT" ]; then
+    PRD="$LEGACY_PRD_DEFAULT"
+    PROGRESS="$LEGACY_PROGRESS_DEFAULT"
+    echo "Warning: legacy ralph/ paths in use" >&2
+    return
+  fi
+
+  echo "Missing cycle. Set RALPH_CYCLE or pass --cycle <id>"
+  exit 1
+}
+
+set_conf_cycle() {
+  local id="$1"
+  if [ ! -f ./ralph.conf ]; then
+    cp "$RALPH_DIR/init/ralph.conf" ./ralph.conf
+  fi
+
+  if grep -q '^RALPH_CYCLE=' ./ralph.conf; then
+    local tmp
+    tmp="$(mktemp)"
+    awk -v id="$id" '
+      /^RALPH_CYCLE=/ { print "RALPH_CYCLE=\"" id "\""; next }
+      { print }
+    ' ./ralph.conf > "$tmp"
+    mv "$tmp" ./ralph.conf
+  else
+    printf '\nRALPH_CYCLE="%s"\n' "$id" >> ./ralph.conf
+  fi
+}
+
+create_cycle_files() {
+  local id="$1"
+  local cycle_dir
+  cycle_dir="./.ralph/cycles/$id"
+
+  if [ -e "$cycle_dir/PRD.md" ] || [ -e "$cycle_dir/progress.txt" ]; then
+    echo "Cycle already exists: $id"
+    exit 1
+  fi
+
+  mkdir -p "$cycle_dir"
+  cp "$RALPH_DIR/init/PRD.md" "$cycle_dir/PRD.md"
+  cp "$RALPH_DIR/init/progress.txt" "$cycle_dir/progress.txt"
+}
 
 parse_run_flags() {
   while [ $# -gt 0 ]; do
@@ -87,6 +185,18 @@ parse_run_flags() {
         MODEL="${1#*=}"
         shift
         ;;
+      -c|--cycle)
+        if [ -z "${2:-}" ]; then
+          echo "Missing value for $1"
+          exit 1
+        fi
+        CYCLE_ID="$2"
+        shift 2
+        ;;
+      --cycle=*)
+        CYCLE_ID="${1#*=}"
+        shift
+        ;;
       --mode)
         if [ -z "${2:-}" ]; then
           echo "Missing value for $1"
@@ -109,6 +219,62 @@ parse_run_flags() {
         ;;
       --migration-cmd=*)
         MIGRATION_CMD="${1#*=}"
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+    esac
+  done
+}
+
+parse_cycle_flags() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -c|--cycle)
+        if [ -z "${2:-}" ]; then
+          echo "Missing value for $1"
+          exit 1
+        fi
+        CYCLE_ID="$2"
+        shift 2
+        ;;
+      --cycle=*)
+        CYCLE_ID="${1#*=}"
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1"
+        usage
+        exit 1
+        ;;
+    esac
+  done
+}
+
+parse_init_flags() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -c|--cycle)
+        if [ -z "${2:-}" ]; then
+          echo "Missing value for $1"
+          exit 1
+        fi
+        CYCLE_ID="$2"
+        shift 2
+        ;;
+      --cycle=*)
+        CYCLE_ID="${1#*=}"
         shift
         ;;
       -h|--help)
@@ -194,6 +360,18 @@ validate_iterations() {
 }
 
 do_run() {
+  resolve_paths
+
+  if [ ! -f "$PRD" ]; then
+    echo "Missing PRD: $PRD"
+    exit 1
+  fi
+
+  if [ ! -f "$PROGRESS" ]; then
+    echo "Missing progress log: $PROGRESS"
+    exit 1
+  fi
+
   if [ -z "$MODE" ]; then
     if [ "$ITERATIONS" -gt 1 ]; then
       MODE="tdd"
@@ -270,23 +448,62 @@ do_run() {
 }
 
 do_init() {
-  if [ -e ./ralph.conf ] || [ -e ./ralph/PRD.md ] || [ -e ./ralph/progress.txt ]; then
-    echo "Init aborted: ralph files already exist in this directory"
-    exit 1
+  if [ -z "$CYCLE_ID" ]; then
+    CYCLE_ID="$(default_cycle_id)"
   fi
+  validate_cycle_id "$CYCLE_ID"
 
   if [ ! -f "$RALPH_DIR/init/ralph.conf" ] || [ ! -f "$RALPH_DIR/init/PRD.md" ] || [ ! -f "$RALPH_DIR/init/progress.txt" ]; then
     echo "Init templates missing in $RALPH_DIR/init"
     exit 1
   fi
 
-  mkdir -p ./ralph
-  cp "$RALPH_DIR/init/ralph.conf" ./ralph.conf
-  cp "$RALPH_DIR/init/PRD.md" ./ralph/PRD.md
-  cp "$RALPH_DIR/init/progress.txt" ./ralph/progress.txt
+  create_cycle_files "$CYCLE_ID"
+  set_conf_cycle "$CYCLE_ID"
+  echo "Initialized cycle: $CYCLE_ID"
+}
+
+do_new_cycle() {
+  if [ -z "$CYCLE_ID" ]; then
+    echo "Missing cycle id"
+    echo "Use: ralph new-cycle <id>"
+    exit 1
+  fi
+
+  validate_cycle_id "$CYCLE_ID"
+
+  if [ ! -f "$RALPH_DIR/init/PRD.md" ] || [ ! -f "$RALPH_DIR/init/progress.txt" ]; then
+    echo "Init templates missing in $RALPH_DIR/init"
+    exit 1
+  fi
+
+  create_cycle_files "$CYCLE_ID"
+  set_conf_cycle "$CYCLE_ID"
+  echo "Created cycle: $CYCLE_ID"
+}
+
+do_list_cycles() {
+  if [ ! -d ./.ralph/cycles ]; then
+    echo "No cycles found"
+    exit 0
+  fi
+
+  for d in ./.ralph/cycles/*; do
+    if [ -d "$d" ]; then
+      local id
+      id="$(basename "$d")"
+      if [ "$id" = "$CYCLE_ID" ]; then
+        printf '* %s\n' "$id"
+      else
+        printf '  %s\n' "$id"
+      fi
+    fi
+  done
 }
 
 do_status() {
+  resolve_paths
+
   if [ ! -f "$PRD" ]; then
     echo "Missing PRD: $PRD"
     exit 1
@@ -315,6 +532,8 @@ do_status() {
 }
 
 do_log() {
+  resolve_paths
+
   if [ ! -f "$PROGRESS" ]; then
     echo "Missing progress log: $PROGRESS"
     exit 1
@@ -329,12 +548,32 @@ case "${1:-}" in
     do_run
     ;;
   init)
+    shift
+    CYCLE_ID=""
+    parse_init_flags "$@"
     do_init
     ;;
+  new-cycle)
+    shift
+    CYCLE_ID=""
+    if [ $# -gt 0 ] && [[ "$1" != -* ]] && [ -z "$CYCLE_ID" ]; then
+      CYCLE_ID="$1"
+      shift
+    fi
+    parse_cycle_flags "$@"
+    do_new_cycle
+    ;;
+  list-cycles)
+    do_list_cycles
+    ;;
   status)
+    shift
+    parse_cycle_flags "$@"
     do_status
     ;;
   log)
+    shift
+    parse_cycle_flags "$@"
     do_log
     ;;
   -h|--help|help|"")

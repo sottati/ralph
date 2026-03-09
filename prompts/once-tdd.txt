@@ -4,34 +4,49 @@ Rules:
 1. Read {{PRD_PATH}} and {{PROGRESS_PATH}}.
 2. Use only the `## Tareas` section in PRD to select work.
 3. Select exactly one task for this run:
-   - only tasks with `Status: pending`
-   - risk order: `high` before `medium` before `low`
+   - tasks with `Status: blocked` or `Status: pending`
+   - blocked tasks take priority over pending (re-check first)
+   - then risk order: `high` before `medium` before `low`
    - tie-break by task id ascending (`T01`, `T02`, ...)
-4. Work only on the selected task:
+4. Before starting work, review locally installed skills and load any
+   that are relevant to the selected task's domain (alongside `tdd`).
+5. Baseline: run `{{QUALITY_GATE}}` BEFORE starting work.
+   - Record the count and identity of pre-existing failures (failing
+     test names, lint errors). This is the BASELINE.
+   - If all checks pass, BASELINE is clean (zero failures).
+6. Work on the selected task:
    - update selected task status to `in_progress`
-   - apply TDD vertical slices for acceptance criteria and test targets
-   - RED -> GREEN cycles can repeat until behavior is covered
-5. Run feedback loops: `{{QUALITY_GATE}}`. Both must pass.
-6. If both checks pass:
-   - mark only completed acceptance criteria as checked (`- [x]`)
-   - set selected task `Status: done`
-   - append a dated progress entry to {{PROGRESS_PATH}}
-   - commit with message: `{{COMMIT_PREFIX}}(Txx): <behavior tested>`
-7. If any check fails:
-   - do not set `Status: done`
-   - keep or set status as `blocked` with a short reason in task notes
-   - append failure details to {{PROGRESS_PATH}}
-   - do not commit
-8. Do not change other tasks, statuses, or checklists.
-9. After finishing this single task, STOP immediately.
-10. Do not mention or analyze the next task, priority queue, or future steps.
+   - if the task was `blocked`: read its Notes for the block reason.
+     Check if the blocker is already resolved. Do NOT re-implement
+     code that already exists; only fix what remains broken.
+   - if the task was `pending`: apply TDD vertical slices for
+     acceptance criteria and test targets. RED -> GREEN cycles can
+     repeat until behavior is covered.
+   - if pre-existing failures exist in files touched by this task,
+     fix them as part of this task.
+7. Run feedback loops: `{{QUALITY_GATE}}`. Compare results to BASELINE.
+8. If no NEW failures vs BASELINE (same or fewer):
+    - mark only completed acceptance criteria as checked (`- [x]`)
+    - set selected task `Status: done`
+    - append a dated progress entry to {{PROGRESS_PATH}}
+    - if pre-existing failures remain in unrelated files, also append
+      `TECH_DEBT: <N> pre-existing failures in <files>` to progress
+    - commit with message: `{{COMMIT_PREFIX}}(Txx): <behavior tested>`
+9. If there are NEW failures not in BASELINE:
+    - do not set `Status: done`
+    - keep or set status as `blocked` with a short reason in task notes
+    - append failure details to {{PROGRESS_PATH}}
+    - do not commit
+10. Do not change other tasks, statuses, or checklists.
+11. After finishing this single task, STOP immediately.
+12. Do not mention or analyze the next task, priority queue, or future steps.
 
 Output contract:
-- If there are no pending tasks, output exactly: `<promise>COMPLETE</promise>`
+- If there are no pending or blocked tasks, output exactly: `<promise>COMPLETE</promise>`
 - If one task was processed in this one-shot run, output exactly: `<promise>ONCE_DONE:Txx</promise>`
 
 Important:
-- Use the `tdd` skill for all development.
+- Always use the `tdd` skill. Additionally load domain-specific skills when relevant.
 - Validate observable behavior, not internals.
 - Never execute DB migrations against the database (no migrate, push, or direct SQL).
 - When schema changes are needed, update schema source files and run `{{MIGRATION_CMD}}` to generate migration artifacts. Never write migration files by hand.
